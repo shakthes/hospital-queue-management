@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>🏥 Hospital Queue Management System</title>
+<link rel="stylesheet" href="/static/css/style.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+</head>
+<body>
+
+<!-- ==================== HEADER ==================== -->
+<header class="app-header">
+  <div class="header-left">
+    <span class="logo">🏥</span>
+    <div>
+      <h1>Hospital Patient Queue Management</h1>
+      <small>OS Concepts: Priority Scheduling · Aging · Semaphores · Multi-threading</small>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-clock" id="liveClock">--:--:--</div>
+    <div class="header-actions">
+      <button class="btn btn-sample" onclick="loadSample()">
+        <i class="fa fa-flask"></i> Load Sample Data
+      </button>
+      <button class="btn btn-danger" onclick="resetSystem()">
+        <i class="fa fa-rotate-left"></i> Reset
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ==================== ALERT BANNER ==================== -->
+<div id="alertBanner" class="alert-banner hidden"></div>
+
+<!-- ==================== STATS ROW ==================== -->
+<section class="stats-row">
+  <div class="stat-card" id="statWaiting">
+    <i class="fa fa-hourglass-half"></i>
+    <div>
+      <span class="stat-num" id="numWaiting">0</span>
+      <span class="stat-label">Waiting</span>
+    </div>
+    <span class="stat-os-tag">Ready Queue</span>
+  </div>
+  <div class="stat-card" id="statTreatment">
+    <i class="fa fa-stethoscope"></i>
+    <div>
+      <span class="stat-num" id="numTreatment">0</span>
+      <span class="stat-label">In Treatment</span>
+    </div>
+    <span class="stat-os-tag">Running</span>
+  </div>
+  <div class="stat-card completed-card">
+    <i class="fa fa-circle-check"></i>
+    <div>
+      <span class="stat-num" id="numCompleted">0</span>
+      <span class="stat-label">Completed</span>
+    </div>
+    <span class="stat-os-tag">Terminated</span>
+  </div>
+  <div class="stat-card">
+    <i class="fa fa-clock"></i>
+    <div>
+      <span class="stat-num" id="avgWait">0s</span>
+      <span class="stat-label">Avg Wait</span>
+    </div>
+    <span class="stat-os-tag">Performance</span>
+  </div>
+  <div class="stat-card">
+    <i class="fa fa-bolt"></i>
+    <div>
+      <span class="stat-num" id="throughput">0</span>
+      <span class="stat-label">Patients/hr</span>
+    </div>
+    <span class="stat-os-tag">Throughput</span>
+  </div>
+  <div class="stat-card semaphore-card">
+    <i class="fa fa-traffic-light"></i>
+    <div>
+      <span class="stat-num" id="semValue">5</span>
+      <span class="stat-label">Doctors Free</span>
+    </div>
+    <span class="stat-os-tag">Semaphore</span>
+  </div>
+</section>
+
+<!-- ==================== MAIN GRID ==================== -->
+<main class="main-grid">
+
+  <!-- LEFT: Queue + Treatment -->
+  <div class="left-col">
+
+    <!-- Ready Queue (OS: Ready Queue) -->
+    <div class="card">
+      <div class="card-header">
+        <h2><i class="fa fa-list-ol"></i> Ready Queue <span class="os-badge">Priority Scheduler</span></h2>
+        <button class="btn btn-primary btn-sm" onclick="openRegisterModal()">
+          <i class="fa fa-plus"></i> Add Patient
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" id="queueTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Age</th>
+              <th>Disease</th>
+              <th>Severity</th>
+              <th>Eff. Priority</th>
+              <th>Waiting</th>
+              <th>Aging ↑</th>
+            </tr>
+          </thead>
+          <tbody id="queueBody">
+            <tr class="empty-row"><td colspan="9">No patients waiting. Click "Add Patient" or "Load Sample Data".</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- In Treatment (OS: Running) -->
+    <div class="card">
+      <div class="card-header">
+        <h2><i class="fa fa-user-doctor"></i> In Treatment <span class="os-badge running-badge">Running Process</span></h2>
+      </div>
+      <div id="treatmentCards" class="treatment-grid">
+        <p class="empty-msg">No patients currently in treatment.</p>
+      </div>
+    </div>
+
+    <!-- Gantt Chart -->
+    <div class="card">
+      <div class="card-header">
+        <h2><i class="fa fa-chart-gantt"></i> Treatment Gantt Chart <span class="os-badge">CPU Burst Timeline</span></h2>
+      </div>
+      <div id="ganttContainer" class="gantt-container">
+        <p class="empty-msg">Gantt chart will appear after first patient is treated.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT: Doctors + Alerts + Completed -->
+  <div class="right-col">
+
+    <!-- Doctor Resource Panel (OS: CPU / Resource) -->
+    <div class="card">
+      <div class="card-header">
+        <h2><i class="fa fa-user-tie"></i> Doctor Status <span class="os-badge">CPU Resources</span></h2>
+        <span class="sem-indicator" id="semIndicator">🔒 Semaphore: <strong id="semBadge">5</strong>/5</span>
+      </div>
+      <div id="doctorCards" class="doctor-grid"></div>
+    </div>
+
+    <!-- Algorithm Concepts Panel -->
+    <div class="card concept-card">
+      <div class="card-header">
+        <h2><i class="fa fa-microchip"></i> OS Concepts Active</h2>
+      </div>
+      <div class="concept-grid">
+        <div class="concept-item">
+          <span class="concept-icon">🏆</span>
+          <div>
+            <strong>Priority Scheduling</strong>
+            <small>Critical → High → Medium → Low</small>
+          </div>
+        </div>
+        <div class="concept-item">
+          <span class="concept-icon">⏫</span>
+          <div>
+            <strong>Aging Algorithm</strong>
+            <small>Priority boosts every 15s — no starvation</small>
+          </div>
+        </div>
+        <div class="concept-item">
+          <span class="concept-icon">🚦</span>
+          <div>
+            <strong>Semaphore (Counting)</strong>
+            <small>Controls doctor (resource) pool access</small>
+          </div>
+        </div>
+        <div class="concept-item">
+          <span class="concept-icon">🔒</span>
+          <div>
+            <strong>Mutex Lock</strong>
+            <small>One patient per doctor (no race condition)</small>
+          </div>
+        </div>
+        <div class="concept-item">
+          <span class="concept-icon">🧵</span>
+          <div>
+            <strong>Multi-threading</strong>
+            <small>Scheduler + Aging run as daemon threads</small>
+          </div>
+        </div>
+        <div class="concept-item">
+          <span class="concept-icon">⏱️</span>
+          <div>
+            <strong>FCFS Tie-break</strong>
+            <small>Equal priority → first arrival first</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerts Panel -->
+    <div class="card">
+      <div class="card-header">
+        <h2><i class="fa fa-bell"></i> System Alerts</h2>
+        <button class="btn btn-sm" onclick="clearAlerts()">Clear</button>
+      </div>
+      <div id="alertsList" class="alerts-list">
+        <p class="empty-msg">No alerts yet.</p>
+      </div>
+    </div>
+
+    <!-- Completed Patients -->
+    <div class="card">
+      <div class="card-header">
+        <h2><i class="fa fa-circle-check"></i> Completed <span class="os-badge">Terminated</span></h2>
+      </div>
+      <div class="table-wrap compact">
+        <table class="data-table" id="completedTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Severity</th>
+              <th>Wait</th>
+              <th>Treatment</th>
+              <th>Doctor</th>
+            </tr>
+          </thead>
+          <tbody id="completedBody">
+            <tr class="empty-row"><td colspan="6">No completed patients yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- ==================== REGISTER MODAL ==================== -->
+<div id="registerModal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h2><i class="fa fa-user-plus"></i> Register New Patient</h2>
+      <button class="modal-close" onclick="closeRegisterModal()">✕</button>
+    </div>
+    <form id="registerForm" onsubmit="submitPatient(event)">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Patient Name <span class="req">*</span></label>
+          <input type="text" id="f_name" placeholder="e.g. John Smith" required/>
+        </div>
+        <div class="form-group">
+          <label>Age <span class="req">*</span></label>
+          <input type="number" id="f_age" min="1" max="120" placeholder="e.g. 45" required/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Disease / Symptoms <span class="req">*</span></label>
+        <input type="text" id="f_disease" placeholder="e.g. Chest pain, Fever, Fracture..." required/>
+      </div>
+      <div class="form-group">
+        <label>Severity Level <span class="req">*</span> <small>(Priority in OS terms)</small></label>
+        <div class="severity-options">
+          <label class="sev-opt critical">
+            <input type="radio" name="severity" value="1" required/>
+            <span>🔴 Critical (1)</span>
+            <small>Immediate threat to life</small>
+          </label>
+          <label class="sev-opt high">
+            <input type="radio" name="severity" value="2"/>
+            <span>🟠 High (2)</span>
+            <small>Serious condition</small>
+          </label>
+          <label class="sev-opt medium">
+            <input type="radio" name="severity" value="3"/>
+            <span>🟡 Medium (3)</span>
+            <small>Moderate condition</small>
+          </label>
+          <label class="sev-opt low">
+            <input type="radio" name="severity" value="4"/>
+            <span>🟢 Low (4)</span>
+            <small>Minor ailment</small>
+          </label>
+        </div>
+      </div>
+      <div class="os-explainer">
+        <strong>🖥️ OS Mapping:</strong>
+        Patient = Process · Severity = Priority · Arrival = Process Creation Time
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn" onclick="closeRegisterModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">
+          <i class="fa fa-paper-plane"></i> Register Patient
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ==================== NOTIFICATION TOAST ==================== -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
